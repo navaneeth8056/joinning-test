@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Speed Dating · Rotation Test</title>
+<!-- Jitsi public instance embed API. No API key, no billing. -->
+<script src="https://meet.jit.si/external_api.js"></script>
+<style>
+  :root{
+    --bg:#160f1c; --surface:#271a31; --line:#3d2b4a; --text:#f4eef8;
+    --dim:#a594b3; --coral:#ff5d73; --amber:#f2a64a; --green:#56d6a0; --lav:#b98cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:ui-sans-serif,system-ui,-apple-system,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:20px}
+  .eyebrow{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#6f5e7e}
+  h1{font-size:22px;margin:4px 0 2px}
+  .sub{color:var(--dim);font-size:14px;margin-bottom:20px;line-height:1.5}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .roles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+  .role{padding:14px;border-radius:12px;border:1px solid var(--line);background:#1e1526;
+    color:var(--text);cursor:pointer;text-align:left;font-size:14px;transition:.15s}
+  .role:hover{border-color:var(--lav)}
+  .role.active{border-color:var(--coral);background:#33233f}
+  .role b{display:block;margin-bottom:3px}
+  .role span{color:var(--dim);font-size:12px}
+  button.go{background:var(--coral);color:#160f1c;border:none;border-radius:10px;
+    padding:12px 18px;font-size:15px;font-weight:600;cursor:pointer}
+  button.go:disabled{opacity:.4;cursor:not-allowed}
+  .status{display:flex;align-items:center;gap:14px;margin:14px 0;flex-wrap:wrap}
+  .clock{font-variant-numeric:tabular-nums;font-size:34px;font-weight:600;
+    font-family:ui-monospace,monospace}
+  .pill{padding:5px 12px;border-radius:8px;font-size:13px;background:#1e1526;border:1px solid var(--line)}
+  #stage{margin-top:14px;height:520px;border-radius:14px;overflow:hidden;background:#0d0913;
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+  #stage iframe{width:100%;height:100%;border:0}
+  .msg{text-align:center;color:var(--dim);padding:30px}
+  .msg .big{font-size:18px;color:var(--text);margin-bottom:10px}
+  .msg .count{font-size:64px;font-weight:600;font-variant-numeric:tabular-nums;
+    font-family:ui-monospace,monospace;color:var(--amber)}
+  .foot{color:#6f5e7e;font-size:12px;margin-top:14px;line-height:1.6}
+  code{background:#1e1526;padding:1px 6px;border-radius:5px;color:var(--dim)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Speed Dating · Rotation Test</div>
+  <h1>Round → 30s idle break → next round</h1>
+  <div class="sub">Round 1 (1 min): you + Colleague 1. Then a 30-second break where the screen
+    sits idle and counts down. Then Round 2 (1 min): you + Colleague 2 — who has been waiting
+    on the same link the whole time. Your round clock starts the moment you are actually in the
+    call, not when you tap Start, so the login and camera prompts do not eat your time.</div>
+
+  <div class="card" id="setup">
+    <div style="font-size:14px;color:var(--dim)">Who are you on this device?</div>
+    <div class="roles">
+      <button class="role" data-role="me"><b>You (Krishna)</b><span>host · in both rounds · log in as moderator</span></button>
+      <button class="role" data-role="c1"><b>Colleague 1</b><span>round 1, then leaves</span></button>
+      <button class="role" data-role="c2"><b>Colleague 2</b><span>waits on this link, joins round 2</span></button>
+    </div>
+    <button class="go" id="start" disabled>Start test</button>
+    <div class="foot">
+      Everyone opens this same page and starts together. Krishna must be the first into each room —
+      when prompted, click <b>Log in</b> and use Google. Colleagues just allow camera/mic; no account needed.
+    </div>
+  </div>
+
+  <div class="card" id="live" style="display:none">
+    <div class="status">
+      <div class="clock" id="clock">1:00</div>
+      <div class="pill" id="phase">—</div>
+      <div class="pill" id="who">—</div>
+    </div>
+    <div id="stage"><div class="msg"><div class="big">Getting ready…</div></div></div>
+  </div>
+
+  <div class="foot">
+    <b>Test scale:</b> Round 1 = 60s, idle break = 30s, Round 2 = 60s. Session id
+    <code id="sid"></code> — everyone on this page shares it, so you all land in the same rooms.
+    Change <code>SESSION</code> at the top of the file for a fresh run.
+  </div>
+</div>
+
+<script>
+/* ── config ─────────────────────────────────────────────── */
+const SESSION    = "dverse-sd-test-7k2x";   // all 3 devices must share this
+const ROUND_SECS = 60;                       // 1-minute test rounds
+const BREAK_SECS = 30;                       // idle gap between rounds
+const ROOM_A = SESSION + "-roundA";          // Krishna + Colleague 1
+const ROOM_B = SESSION + "-roundB";          // Krishna + Colleague 2
+const NAMES  = { me:"Krishna", c1:"Colleague 1", c2:"Colleague 2" };
+
+const R1_END    = ROUND_SECS;                // 60
+const BREAK_END = ROUND_SECS + BREAK_SECS;   // 90
+const R2_END    = ROUND_SECS*2 + BREAK_SECS; // 150
+
+/* ── per-role timeline (each segment runs until the next one's `at`) ── */
+function timeline(role){
+  if(role==="me") return [
+    {at:0,         type:"room", room:ROOM_A, label:"Round 1 · with Colleague 1"},
+    {at:R1_END,    type:"idle",             label:"Break · next match in"},
+    {at:BREAK_END, type:"room", room:ROOM_B, label:"Round 2 · with Colleague 2"},
+    {at:R2_END,    type:"done"},
+  ];
+  if(role==="c1") return [
+    {at:0,         type:"room", room:ROOM_A, label:"Round 1 · with Krishna"},
+    {at:R1_END,    type:"done"},
+  ];
+  return [ /* c2 */
+    {at:0,         type:"idle",             label:"Waiting · your round starts in"},
+    {at:BREAK_END, type:"room", room:ROOM_B, label:"Round 2 · with Krishna"},
+    {at:R2_END,    type:"done"},
+  ];
+}
+
+/* ── state ──────────────────────────────────────────────── */
+let role=null, startMs=0, api=null, idx=-1, tl=[], clockStarted=false, ticker=null;
+const $=id=>document.getElementById(id);
+const fmt=s=>Math.floor(s/60)+":"+String(Math.max(0,s)%60).padStart(2,"0");
+$("sid").textContent = SESSION;
+
+document.querySelectorAll(".role").forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll(".role").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active"); role=b.dataset.role; $("start").disabled=false;
+  };
+});
+
+$("start").onclick=()=>{
+  $("setup").style.display="none"; $("live").style.display="block";
+  tl=timeline(role); idx=-1;
+
+  if(tl[0].type==="room"){
+    // Join the first room now, but DON'T start the clock until we're actually in.
+    idx=0;                                   // mark first segment active so tick won't rejoin
+    joinRoom(tl[0].room, tl[0].label);
+    $("phase").textContent="Connecting — timer starts when you're in";
+    $("clock").textContent=fmt(ROUND_SECS);
+    api.addEventListener("videoConferenceJoined", startClock);
+    // safety: if the join event never fires, start anyway after 45s
+    setTimeout(()=>{ if(!clockStarted) startClock(); }, 45000);
+  } else {
+    // Idle-first role (Colleague 2 has no call to enter yet): clock starts on tap.
+    startClock();
+  }
+};
+
+function startClock(){
+  if(clockStarted) return;
+  clockStarted=true; startMs=Date.now();
+  tick(); ticker=setInterval(tick,250);
+}
+
+function joinRoom(room,label){
+  if(api){ api.dispose(); api=null; }
+  $("stage").innerHTML="";
+  api=new JitsiMeetExternalAPI("meet.jit.si",{
+    roomName:room, parentNode:$("stage"),
+    userInfo:{ displayName:NAMES[role] },
+    configOverwrite:{ prejoinPageEnabled:false, startWithAudioMuted:false, disableDeepLinking:true },
+    interfaceConfigOverwrite:{ MOBILE_APP_PROMO:false,
+      TOOLBAR_BUTTONS:["microphone","camera","tileview","hangup"] },
+  });
+  $("phase").textContent=label;
+}
+
+function tick(){
+  const elapsed=(Date.now()-startMs)/1000;
+  let seg=-1;
+  for(let i=0;i<tl.length;i++){ if(elapsed>=tl[i].at) seg=i; }
+  const s=tl[seg];
+  const nextAt = (seg+1<tl.length) ? tl[seg+1].at : null;
+  const remaining = nextAt!=null ? Math.max(0,Math.ceil(nextAt-elapsed)) : 0;
+
+  if(seg!==idx){
+    idx=seg;
+    if(s.type==="room") joinRoom(s.room,s.label);   // clock keeps running for later rounds
+    else if(s.type==="idle"){ if(api){api.dispose();api=null;} $("phase").textContent=s.label; }
+    else if(s.type==="done"){
+      if(api){api.dispose();api=null;}
+      $("phase").textContent="Done";
+      $("stage").innerHTML='<div class="msg"><div class="big">Test complete \u2713</div>'+
+        '<div>The room closed itself, the break counted down, and the next round connected. '+
+        'That is the rotation working.</div></div>';
+    }
+  }
+
+  $("who").textContent="You are "+NAMES[role];
+  if(s.type==="done"){ $("clock").textContent="0:00"; return; }
+  $("clock").textContent=fmt(remaining);
+  if(s.type==="idle"){
+    $("stage").innerHTML='<div class="msg"><div class="big">'+s.label+'</div>'+
+      '<div class="count">'+fmt(remaining)+'</div></div>';
+  }
+}
+</script>
+</body>
+</html>
