@@ -3,8 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Speed Dating · Sequential Rotation Test</title>
-<script src="https://meet.jit.si/external_api.js"></script>
+<title>Speed Dating · Shared-Clock Test</title>
 <style>
   :root{--bg:#160f1c;--surface:#271a31;--line:#3d2b4a;--text:#f4eef8;--dim:#a594b3;
     --coral:#ff5d73;--amber:#f2a64a;--green:#56d6a0;--lav:#b98cff;}
@@ -14,7 +13,7 @@
   .eyebrow{font-size:12px;letter-spacing:2px;text-transform:uppercase;color:#6f5e7e}
   h1{font-size:22px;margin:4px 0 2px}
   .sub{color:var(--dim);font-size:14px;margin-bottom:20px;line-height:1.5}
-  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px}
   .roles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0}
   .role{padding:14px;border-radius:12px;border:1px solid var(--line);background:#1e1526;
     color:var(--text);cursor:pointer;text-align:left;font-size:14px;transition:.15s}
@@ -25,10 +24,13 @@
   button.go{background:var(--coral);color:#160f1c;border:none;border-radius:10px;
     padding:12px 18px;font-size:15px;font-weight:600;cursor:pointer}
   button.go:disabled{opacity:.4;cursor:not-allowed}
+  button.ghost{background:#1e1526;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:14px;cursor:pointer}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .share{margin-top:12px;padding:12px;border:1px dashed var(--line);border-radius:10px;font-size:13px;color:var(--dim);word-break:break-all}
   .status{display:flex;align-items:center;gap:14px;margin:14px 0;flex-wrap:wrap}
   .clock{font-variant-numeric:tabular-nums;font-size:34px;font-weight:600;font-family:ui-monospace,monospace}
   .pill{padding:5px 12px;border-radius:8px;font-size:13px;background:#1e1526;border:1px solid var(--line)}
-  #startEvent{margin-left:auto}
+  a.open{margin-left:auto;color:var(--lav);font-size:13px;text-decoration:none}
   #stage{margin-top:14px;height:520px;border-radius:14px;overflow:hidden;background:#0d0913;
     border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
   #stage iframe{width:100%;height:100%;border:0}
@@ -41,25 +43,35 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow">Speed Dating · Sequential Rotation</div>
-  <h1>Person 1 meets everyone, one at a time</h1>
-  <div class="sub">Person 1 meets Person 2 (1 min), then Person 3, then Person 4 — with a 30-second
-    break between each. While Person 1 is in a meeting, the others wait in the lobby and see a
-    live countdown to their own turn. One shared clock keeps every screen in sync.</div>
+  <div class="eyebrow">Speed Dating · Shared-Clock Test</div>
+  <h1>Person 1 meets everyone — one clock for all</h1>
+  <div class="sub">Person 1 meets Person 2 (1 min), then Person 3, then Person 4, with a 30-second
+    break between. While a meeting runs, everyone else sees a countdown that is driven by the same
+    clock — so the waiting timer always matches the meeting timer. No host, no sign-in to coordinate.</div>
 
   <div class="card" id="setup">
-    <div style="font-size:14px;color:var(--dim)">Who are you on this device?</div>
-    <div class="roles">
-      <button class="role" data-role="p1"><b>Person 1</b><span>host · meets everyone · log in with Google</span></button>
-      <button class="role" data-role="p2"><b>Person 2</b><span>meets Person 1 first</span></button>
-      <button class="role" data-role="p3"><b>Person 3</b><span>waits, then meets Person 1</span></button>
-      <button class="role" data-role="p4"><b>Person 4</b><span>waits, then meets Person 1</span></button>
+    <div id="startBlock">
+      <div style="font-size:14px;color:var(--dim);margin-bottom:6px">First, one person starts the event and shares the link.</div>
+      <div class="row">
+        <button class="go" id="startBtn">Start event &amp; make share link</button>
+      </div>
+      <div class="share" id="shareBox" style="display:none">
+        Share this exact link with all four participants:<br><br>
+        <span id="shareUrl"></span><br><br>
+        <button class="ghost" id="copyBtn">Copy link</button>
+      </div>
     </div>
-    <button class="go" id="enter" disabled>Enter lobby</button>
-    <div class="foot">
-      Open this same page on all four devices and enter the lobby. <b>Only Person 1 needs to log in</b>
-      (click Log in → Google) — they are the moderator in every meeting. When everyone is in the lobby,
-      Person 1 clicks <b>Start event</b>.
+
+    <div id="pickBlock" style="margin-top:16px">
+      <div style="font-size:14px;color:var(--dim)">Then, on each device, pick who you are:</div>
+      <div class="roles">
+        <button class="role" data-role="p1"><b>Person 1</b><span>meets everyone</span></button>
+        <button class="role" data-role="p2"><b>Person 2</b><span>meets Person 1 first</span></button>
+        <button class="role" data-role="p3"><b>Person 3</b><span>waits, then Person 1</span></button>
+        <button class="role" data-role="p4"><b>Person 4</b><span>waits, then Person 1</span></button>
+      </div>
+      <button class="go" id="joinBtn" disabled>Join</button>
+      <div class="foot" id="joinHint">Pick your number. (The event must be started first — use the button above, or open the shared link.)</div>
     </div>
   </div>
 
@@ -68,32 +80,39 @@
       <div class="clock" id="clock">—</div>
       <div class="pill" id="phase">—</div>
       <div class="pill" id="who">—</div>
-      <button class="go" id="startEvent" style="display:none">Start event</button>
+      <a class="open" id="openLink" target="_blank" rel="noopener" style="display:none">Open meeting in new tab ↗</a>
     </div>
     <div id="stage"><div class="msg"><div class="big">Getting ready…</div></div></div>
   </div>
 
   <div class="foot">
-    Session id <code id="sid"></code>. Meeting = <code id="rs"></code>s, break = <code id="bs"></code>s
-    (change <code>ROUND_SECS</code> / <code>BREAK_SECS</code> at the top of the file).
+    Meeting = <code id="rs"></code>s, break = <code id="bs"></code>s. Provide your own meeting links by
+    editing <code>LINKS</code> at the top of the file. Both people in a meeting must open the SAME link.
   </div>
 </div>
 
 <script>
-/* ── config ─────────────────────────────────────────────── */
-const SESSION    = "dverse-seq-test-7k2x";
-const ROUND_SECS = 60, BREAK_SECS = 30, START_DELAY = 5;   // production ~600 / 120
-const LOBBY      = SESSION + "-lobby";
+/* ── config you control ─────────────────────────────────── */
+const SESSION    = "dverse-sd-7k2x";
+const ROUND_SECS = 60, BREAK_SECS = 30;     // production ~600 / 120
+
+/* >>> PASTE YOUR 3 MEETING LINKS HERE (any platform — Jitsi/Daily/etc.) <<<
+   Key = the person who meets Person 1 in that round. Both people open the same link. */
+const LINKS = {
+  p2: "https://meet.jit.si/" + SESSION + "-1and2",
+  p3: "https://meet.jit.si/" + SESSION + "-1and3",
+  p4: "https://meet.jit.si/" + SESSION + "-1and4",
+};
+
 const NAMES = { p1:"Person 1", p2:"Person 2", p3:"Person 3", p4:"Person 4" };
 const SEQUENCE = ["p2","p3","p4"];          // order Person 1 meets people
 const STEP = ROUND_SECS + BREAK_SECS;
-const roomFor = (a,b) => SESSION + "-" + [a,b].sort().join("");
 
 function timeline(role){
   if(role==="p1"){
     const segs=[];
     SEQUENCE.forEach((pt,k)=>{
-      segs.push({at:k*STEP, type:"room", room:roomFor("p1",pt), label:"Meeting "+NAMES[pt]});
+      segs.push({at:k*STEP, type:"room", link:LINKS[pt], label:"Meeting "+NAMES[pt]});
       if(k<SEQUENCE.length-1) segs.push({at:k*STEP+ROUND_SECS, type:"break", label:"Break · next match in"});
     });
     segs.push({at:(SEQUENCE.length-1)*STEP+ROUND_SECS, type:"done"});
@@ -101,77 +120,62 @@ function timeline(role){
   }
   const k=SEQUENCE.indexOf(role), ms=k*STEP;
   return [
-    {at:0,           type:"wait", label:"Your meeting with Person 1 · starts in"},
-    {at:ms,          type:"room", room:roomFor("p1",role), label:"Meeting Person 1"},
+    {at:0,             type:"wait", label:"Your meeting with Person 1 · starts in"},
+    {at:ms,            type:"room", link:LINKS[role], label:"Meeting Person 1"},
     {at:ms+ROUND_SECS, type:"done"},
   ];
 }
 
-/* ── state ──────────────────────────────────────────────── */
-let role=null, isHost=false, T0=null, api=null, idx=-1, tl=[], currentRoom=null,
-    ticker=null, hb=null;
-const remoteIds=new Set();
+/* ── shared clock from the URL ──────────────────────────── */
+const params = new URLSearchParams(location.search);
+let T0 = params.get("t0") ? parseInt(params.get("t0"),10) : null;
+let role = params.get("me");
+let tl=[], idx=-1, currentLink=null, ticker=null;
 const $=id=>document.getElementById(id);
 const fmt=s=>Math.floor(s/60)+":"+String(Math.max(0,s)%60).padStart(2,"0");
-$("sid").textContent=SESSION; $("rs").textContent=ROUND_SECS; $("bs").textContent=BREAK_SECS;
+$("rs").textContent=ROUND_SECS; $("bs").textContent=BREAK_SECS;
+
+function refreshJoinState(){
+  $("joinBtn").disabled = !(role && T0!=null);
+  $("joinHint").textContent = T0==null
+    ? "The event has not started yet. One person clicks Start above, or open the shared link."
+    : "Event is running — pick your number and Join. You'll sync to wherever the clock already is.";
+}
+
+if(T0!=null){ $("startBlock").style.display="none"; }   // opened via shared link
+if(role){ document.querySelectorAll(".role").forEach(b=>{ if(b.dataset.role===role) b.classList.add("active"); }); }
+refreshJoinState();
 
 document.querySelectorAll(".role").forEach(b=>{
   b.onclick=()=>{ document.querySelectorAll(".role").forEach(x=>x.classList.remove("active"));
-    b.classList.add("active"); role=b.dataset.role; isHost=(role==="p1"); $("enter").disabled=false; };
+    b.classList.add("active"); role=b.dataset.role; refreshJoinState(); };
 });
 
-$("enter").onclick=()=>{
-  $("setup").style.display="none"; $("live").style.display="block";
-  tl=timeline(role);
-  joinRoom(LOBBY,"Lobby");
-  if(isHost){ $("startEvent").style.display="inline-block"; $("phase").textContent="Lobby — start when everyone is in"; }
-  else      { $("phase").textContent="Waiting for the host to start…"; }
+$("startBtn").onclick=()=>{
+  T0=Date.now();
+  const url=location.origin+location.pathname+"?t0="+T0;
+  history.replaceState(null,"",url);
+  $("shareUrl").textContent=url;
+  $("shareBox").style.display="block";
+  refreshJoinState();
 };
+$("copyBtn").onclick=()=>{ navigator.clipboard.writeText($("shareUrl").textContent)
+  .then(()=>{$("copyBtn").textContent="Copied ✓";}); };
 
-$("startEvent").onclick=()=>{ setT0Host(); $("startEvent").style.display="none"; };
+$("joinBtn").onclick=()=>{ $("setup").style.display="none"; $("live").style.display="block";
+  tl=timeline(role); idx=-1; tick(); ticker=setInterval(tick,250); };
 
-/* ── shared clock ───────────────────────────────────────── */
-function clockReady(){ idx=-1; tick(); if(!ticker) ticker=setInterval(tick,250); }
-function startHeartbeat(){ if(!hb) hb=setInterval(broadcast,2000); }
-function setT0Host(){ if(T0!=null) return; T0=Date.now()+START_DELAY*1000; startHeartbeat(); clockReady(); broadcast(); }
-function adoptT0(t){ if(T0!=null) return; T0=t; startHeartbeat(); clockReady(); }
-function broadcast(){
-  if(!api || T0==null) return;
-  const text=JSON.stringify({type:"sync",t0:T0});
-  try{ api.executeCommand("sendEndpointTextMessage","",text); }catch(e){}
-  remoteIds.forEach(id=>{ try{ api.executeCommand("sendEndpointTextMessage",id,text); }catch(e){} });
+/* ── tick: everything reads the one shared clock ────────── */
+function showMeeting(link,label){
+  currentLink=link; $("phase").textContent=label;
+  $("stage").innerHTML='<iframe src="'+link+'" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>';
+  const a=$("openLink"); a.href=link; a.style.display="inline";
 }
+function hideOpen(){ $("openLink").style.display="none"; currentLink=null; }
 
-/* ── Jitsi room ─────────────────────────────────────────── */
-function joinRoom(room,label){
-  if(api){ api.dispose(); api=null; }
-  remoteIds.clear(); currentRoom=room; $("stage").innerHTML="";
-  api=new JitsiMeetExternalAPI("meet.jit.si",{
-    roomName:room, parentNode:$("stage"), userInfo:{ displayName:NAMES[role] },
-    configOverwrite:{ prejoinPageEnabled:false, startWithAudioMuted:false, disableDeepLinking:true },
-    interfaceConfigOverwrite:{ MOBILE_APP_PROMO:false, TOOLBAR_BUTTONS:["microphone","camera","tileview","hangup"] },
-  });
-  $("phase").textContent=label;
-  api.addEventListener("participantJoined",(p)=>{ if(p&&p.id) remoteIds.add(p.id); if(T0!=null) broadcast(); });
-  api.addEventListener("participantLeft",(p)=>{ if(p&&p.id) remoteIds.delete(p.id); });
-  api.addEventListener("endpointTextMessageReceived",(e)=>{
-    try{ const msg=JSON.parse(e.data.eventData.text);
-      if(msg&&msg.type==="sync"&&msg.t0&&T0==null) adoptT0(msg.t0); }catch(err){}
-  });
-}
-
-/* ── tick ───────────────────────────────────────────────── */
 function tick(){
   if(T0==null) return;
   const master=(Date.now()-T0)/1000;
-  $("who").textContent="You are "+NAMES[role];
-
-  if(master<0){                                   // pre-roll: everyone still in lobby
-    $("phase").textContent="Event starts in "+Math.ceil(-master)+"s";
-    $("clock").textContent=fmt(Math.ceil(-master));
-    return;
-  }
-
   let seg=-1; for(let i=0;i<tl.length;i++){ if(master>=tl[i].at) seg=i; }
   const s=tl[seg];
   const nextAt=(seg+1<tl.length)?tl[seg+1].at:null;
@@ -179,24 +183,24 @@ function tick(){
 
   if(seg!==idx){
     idx=seg;
-    if(s.type==="room"){ if(currentRoom!==s.room) joinRoom(s.room,s.label); else $("phase").textContent=s.label; }
-    else if(s.type==="wait"){ $("phase").textContent=s.label; }            // stay in lobby video
-    else if(s.type==="break"){ if(api){api.dispose();api=null;} currentRoom=null; $("phase").textContent=s.label; }
-    else if(s.type==="done"){ if(api){api.dispose();api=null;} currentRoom=null;
-      if(hb){clearInterval(hb);hb=null;} if(ticker)clearInterval(ticker);
+    if(s.type==="room"){ if(currentLink!==s.link) showMeeting(s.link,s.label); else $("phase").textContent=s.label; }
+    else if(s.type==="wait"){ hideOpen(); $("phase").textContent=s.label; }
+    else if(s.type==="break"){ hideOpen(); $("phase").textContent=s.label; }
+    else if(s.type==="done"){ hideOpen(); if(ticker)clearInterval(ticker);
       $("phase").textContent="Done";
-      const m = role==="p1"
-        ? "You met everyone, one at a time, with breaks in between — that is the sequence working."
-        : "Thank you for joining. In the real event you would now move on to your next partner.";
-      $("stage").innerHTML='<div class="msg"><div class="big">Thank you for joining \u2713</div><div>'+m+'</div></div>'; }
+      const m = role==="p1" ? "You met everyone, with breaks in between."
+                            : "Thank you for joining. In the real event you'd move to your next partner now.";
+      $("stage").innerHTML='<div class="msg"><div class="big">Thank you for joining ✓</div><div>'+m+'</div></div>'; }
   }
 
+  $("who").textContent="You are "+NAMES[role];
   if(s.type==="done"){ $("clock").textContent="0:00"; return; }
   $("clock").textContent=fmt(remaining);
-  if(s.type==="break"){
+  if(s.type==="wait" || s.type==="break"){
+    const note = s.type==="break" ? "Your next meeting opens when this hits zero."
+                                  : "Person 1 is in a meeting. Your link opens when this hits zero.";
     $("stage").innerHTML='<div class="msg"><div class="big">'+s.label+'</div>'+
-      '<div class="count">'+fmt(remaining)+'</div>'+
-      '<div style="margin-top:10px">Your next meeting starts when this hits zero.</div></div>';
+      '<div class="count">'+fmt(remaining)+'</div><div style="margin-top:10px">'+note+'</div></div>';
   }
 }
 </script>
