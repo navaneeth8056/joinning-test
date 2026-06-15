@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Speed Dating · Rotation Test</title>
+<title>Speed Dating · 4-Person Rotation Test</title>
 <script src="https://meet.jit.si/external_api.js"></script>
 <style>
   :root{--bg:#160f1c;--surface:#271a31;--line:#3d2b4a;--text:#f4eef8;--dim:#a594b3;
@@ -15,7 +15,7 @@
   h1{font-size:22px;margin:4px 0 2px}
   .sub{color:var(--dim);font-size:14px;margin-bottom:20px;line-height:1.5}
   .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
-  .roles{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:14px 0}
+  .roles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:14px 0}
   .role{padding:14px;border-radius:12px;border:1px solid var(--line);background:#1e1526;
     color:var(--text);cursor:pointer;text-align:left;font-size:14px;transition:.15s}
   .role:hover{border-color:var(--lav)}
@@ -32,7 +32,7 @@
     border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
   #stage iframe{width:100%;height:100%;border:0}
   .msg{text-align:center;color:var(--dim);padding:30px}
-  .msg .big{font-size:18px;color:var(--text);margin-bottom:10px}
+  .msg .big{font-size:20px;color:var(--text);margin-bottom:10px}
   .msg .count{font-size:64px;font-weight:600;font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace;color:var(--amber)}
   .foot{color:#6f5e7e;font-size:12px;margin-top:14px;line-height:1.6}
   code{background:#1e1526;padding:1px 6px;border-radius:5px;color:var(--dim)}
@@ -40,25 +40,26 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="eyebrow">Speed Dating · Rotation Test</div>
-  <h1>One shared event clock</h1>
-  <div class="sub">The clock starts only when both people in Round 1 are actually in the room.
-    Every round after that reads off the same clock — so the host's break and Round 2 are
-    continuous from that start, and Colleague 2 joining late picks up wherever the clock already is,
-    not from zero. Round 1 = 60s, idle break = 30s, Round 2 = 60s.</div>
+  <div class="eyebrow">Speed Dating · 4-Person Rotation</div>
+  <h1>Everyone meets everyone — on one shared clock</h1>
+  <div class="sub">Three rounds. R1: (1·2) + (3·4). R2: (1·3) + (2·4). R3: (1·4) + (2·3).
+    Everyone gathers in a lobby first; the clock starts once all four are in, and the same clock
+    drives every round and break on all four screens. Between rounds the room ends and you get a
+    countdown to your next partner; after the last round, a thank-you.</div>
 
   <div class="card" id="setup">
     <div style="font-size:14px;color:var(--dim)">Who are you on this device?</div>
     <div class="roles">
-      <button class="role" data-role="me"><b>You (Krishna)</b><span>host · owns the clock · log in as moderator</span></button>
-      <button class="role" data-role="c1"><b>Colleague 1</b><span>round 1, then leaves</span></button>
-      <button class="role" data-role="c2"><b>Colleague 2</b><span>waits in round 2's room, syncs to the clock</span></button>
+      <button class="role" data-role="p1"><b>Person 1</b><span>host · starts the shared clock</span></button>
+      <button class="role" data-role="p2"><b>Person 2</b></button>
+      <button class="role" data-role="p3"><b>Person 3</b></button>
+      <button class="role" data-role="p4"><b>Person 4</b></button>
     </div>
     <button class="go" id="start" disabled>Start test</button>
     <div class="foot">
-      Open this same page on each device. Krishna must be first into each room — click <b>Log in</b>
-      (Google) when asked. Colleagues just allow camera/mic. The Round 1 clock will not move until
-      both Krishna and Colleague 1 are in.
+      Open this same page on all four devices. In the lobby, <b>everyone clicks Log in with Google once</b> —
+      after that you are a moderator in every room you enter, so no pairing gets stuck waiting. The clock
+      will not start until all four are in the lobby.
     </div>
   </div>
 
@@ -72,71 +73,74 @@
   </div>
 
   <div class="foot">
-    Session id <code id="sid"></code> — everyone on this page shares it, so you land in the same
-    rooms. Change <code>SESSION</code> at the top of the file for a fresh run.
+    Session id <code id="sid"></code>. Round = <code id="rs"></code>s, break = <code id="bs"></code>s
+    (lower <code>ROUND_SECS</code> / <code>BREAK_SECS</code> at the top of the file for quicker runs).
   </div>
 </div>
 
 <script>
 /* ── config ─────────────────────────────────────────────── */
-const SESSION    = "dverse-sd-test-7k2x";
-const ROUND_SECS = 60, BREAK_SECS = 30;
-const ROOM_A = SESSION + "-roundA";   // Krishna + Colleague 1
-const ROOM_B = SESSION + "-roundB";   // Krishna + Colleague 2
-const NAMES  = { me:"Krishna", c1:"Colleague 1", c2:"Colleague 2" };
-const R1_END = ROUND_SECS, BREAK_END = ROUND_SECS + BREAK_SECS, R2_END = ROUND_SECS*2 + BREAK_SECS;
+const SESSION    = "dverse-4p-test-7k2x";
+const ROUND_SECS = 45, BREAK_SECS = 15;     // test scale; production ~600 / 120
+const LOBBY      = SESSION + "-lobby";
+const NAMES = { p1:"Person 1", p2:"Person 2", p3:"Person 3", p4:"Person 4" };
 
-/* per-role timeline — every segment is read off the ONE shared clock (master = now - T0) */
+/* the round-robin you specified */
+const ROUNDS = [
+  [["p1","p2"],["p3","p4"]],
+  [["p1","p3"],["p2","p4"]],
+  [["p1","p4"],["p2","p3"]],
+];
+const STEP = ROUND_SECS + BREAK_SECS;
+const roomFor = (a,b) => SESSION + "-" + [a,b].sort().join("");
+
 function timeline(role){
-  if(role==="me") return [
-    {at:0,         type:"room", room:ROOM_A, label:"Round 1 · with Colleague 1"},
-    {at:R1_END,    type:"idle",             label:"Break · next match in"},
-    {at:BREAK_END, type:"room", room:ROOM_B, label:"Round 2 · with Colleague 2"},
-    {at:R2_END,    type:"done"},
-  ];
-  if(role==="c1") return [
-    {at:0,         type:"room", room:ROOM_A, label:"Round 1 · with Krishna"},
-    {at:R1_END,    type:"done"},
-  ];
-  return [ /* c2 — physically sits in ROOM_B the whole time, view follows the clock */
-    {at:0,         type:"wait", room:ROOM_B, label:"Waiting for host · Round 2"},
-    {at:BREAK_END, type:"room", room:ROOM_B, label:"Round 2 · with Krishna"},
-    {at:R2_END,    type:"done"},
-  ];
+  const segs=[];
+  ROUNDS.forEach((pairs,r)=>{
+    const pair = pairs.find(p=>p.includes(role));
+    const partner = pair[0]===role ? pair[1] : pair[0];
+    segs.push({at:r*STEP, type:"room", room:roomFor(role,partner),
+               label:`Round ${r+1} · with ${NAMES[partner]}`});
+    if(r < ROUNDS.length-1)
+      segs.push({at:r*STEP+ROUND_SECS, type:"break", label:`Round ${r+1} done · next match in`});
+  });
+  segs.push({at:(ROUNDS.length-1)*STEP+ROUND_SECS, type:"done"});
+  return segs;
 }
 
 /* ── state ──────────────────────────────────────────────── */
-let role=null, T0=null, api=null, idx=-1, tl=[], currentRoom=null, ticker=null, hb=null;
+let role=null, isHost=false, T0=null, api=null, idx=-1, tl=[], currentRoom=null,
+    ticker=null, hb=null, lobbyPoll=null;
 const remoteIds=new Set();
 const $=id=>document.getElementById(id);
 const fmt=s=>Math.floor(s/60)+":"+String(Math.max(0,s)%60).padStart(2,"0");
-$("sid").textContent=SESSION;
+$("sid").textContent=SESSION; $("rs").textContent=ROUND_SECS; $("bs").textContent=BREAK_SECS;
 
 document.querySelectorAll(".role").forEach(b=>{
   b.onclick=()=>{ document.querySelectorAll(".role").forEach(x=>x.classList.remove("active"));
-    b.classList.add("active"); role=b.dataset.role; $("start").disabled=false; };
+    b.classList.add("active"); role=b.dataset.role; isHost=(role==="p1"); $("start").disabled=false; };
 });
 
 $("start").onclick=()=>{
   $("setup").style.display="none"; $("live").style.display="block";
   tl=timeline(role);
-  if(role==="me"){ joinRoom(ROOM_A,"Round 1 · with Colleague 1");
-    $("phase").textContent="Waiting for Colleague 1 to join…"; $("clock").textContent=fmt(ROUND_SECS); }
-  else if(role==="c1"){ joinRoom(ROOM_A,"Round 1 · with Krishna");
-    $("phase").textContent="Syncing with the room…"; }
-  else { joinRoom(ROOM_B,"Round 2 · with Krishna");
-    $("phase").textContent="Waiting for the host to start Round 2…"; }
+  joinRoom(LOBBY,"Lobby");
+  $("phase").textContent="Waiting for everyone to join…"; $("clock").textContent="—";
+  lobbyPoll=setInterval(()=>{
+    if(T0!=null) return;
+    let n=0; try{ n=(api&&api.getNumberOfParticipants&&api.getNumberOfParticipants())||0; }catch(e){}
+    $("phase").textContent="In the lobby — "+n+" of 4 here";
+    if(isHost && n>=4) setT0Host();
+  },500);
 };
 
-/* ── the shared clock ───────────────────────────────────── */
-function clockReady(){            // called the moment we know T0
-  idx=-1; tick(); if(!ticker) ticker=setInterval(tick,250);
-}
-function setT0Host(){             // host only: both joined Round 1
-  if(T0!=null) return;
-  T0=Date.now(); clockReady(); broadcast(); if(!hb) hb=setInterval(broadcast,3000);
-}
-function broadcast(){             // host pushes T0 to whoever is in the current room
+/* ── the one shared clock ──────────────────────────────── */
+function clockReady(){ idx=-1; tick(); if(!ticker) ticker=setInterval(tick,250); }
+function startHeartbeat(){ if(!hb) hb=setInterval(broadcast,3000); }
+function clearLobby(){ if(lobbyPoll){ clearInterval(lobbyPoll); lobbyPoll=null; } }
+function setT0Host(){ if(T0!=null) return; T0=Date.now(); clearLobby(); startHeartbeat(); clockReady(); broadcast(); }
+function adoptT0(t){ if(T0!=null) return; T0=t; clearLobby(); startHeartbeat(); clockReady(); }
+function broadcast(){
   if(!api || T0==null) return;
   const text=JSON.stringify({type:"sync",t0:T0});
   try{ api.executeCommand("sendEndpointTextMessage","",text); }catch(e){}
@@ -154,28 +158,22 @@ function joinRoom(room,label){
   });
   $("phase").textContent=label;
 
-  api.addEventListener("videoConferenceJoined",()=>{
-    if(role==="me" && T0==null){
-      const n=(api.getNumberOfParticipants&&api.getNumberOfParticipants())||1;
-      if(n>=2) setT0Host();
-    }
-  });
   api.addEventListener("participantJoined",(p)=>{
     if(p&&p.id) remoteIds.add(p.id);
-    if(role==="me"){
-      if(T0==null){ const n=(api.getNumberOfParticipants&&api.getNumberOfParticipants())||2; if(n>=2) setT0Host(); }
-      broadcast();   // covers late joiners (e.g. Colleague 2 in Room B)
+    if(isHost && T0==null){
+      const n=(api.getNumberOfParticipants&&api.getNumberOfParticipants())||0;
+      if(n>=4) setT0Host();
     }
+    if(T0!=null) broadcast();                 // relay clock to newcomers in this room
   });
   api.addEventListener("participantLeft",(p)=>{ if(p&&p.id) remoteIds.delete(p.id); });
   api.addEventListener("endpointTextMessageReceived",(e)=>{
-    if(role==="me") return;
     try{ const msg=JSON.parse(e.data.eventData.text);
-      if(msg&&msg.type==="sync"&&msg.t0&&T0==null){ T0=msg.t0; clockReady(); } }catch(err){}
+      if(msg&&msg.type==="sync"&&msg.t0&&T0==null) adoptT0(msg.t0); }catch(err){}
   });
 }
 
-/* ── tick: read the shared clock, drive the view ────────── */
+/* ── tick ───────────────────────────────────────────────── */
 function tick(){
   if(T0==null) return;
   const master=(Date.now()-T0)/1000;
@@ -187,21 +185,22 @@ function tick(){
   if(seg!==idx){
     idx=seg;
     if(s.type==="room"){ if(currentRoom!==s.room) joinRoom(s.room,s.label); else $("phase").textContent=s.label; }
-    else if(s.type==="wait"){ $("phase").textContent=s.label; }          // stay in room, just wait
-    else if(s.type==="idle"){ if(api){api.dispose();api=null;} currentRoom=null; $("phase").textContent=s.label; }
+    else if(s.type==="break"){ if(api){api.dispose();api=null;} currentRoom=null; $("phase").textContent=s.label; }
     else if(s.type==="done"){ if(api){api.dispose();api=null;} currentRoom=null;
-      $("phase").textContent="Done"; if(hb){clearInterval(hb);hb=null;}
-      $("stage").innerHTML='<div class="msg"><div class="big">Test complete \u2713</div>'+
-        '<div>One clock drove both rounds; the break ran in the middle; the late joiner synced to '+
-        'the correct time. That is the model.</div></div>'; }
+      if(hb){clearInterval(hb);hb=null;} if(ticker){clearInterval(ticker);}
+      $("phase").textContent="Done";
+      $("stage").innerHTML='<div class="msg"><div class="big">Thank you for joining \u2713</div>'+
+        '<div>You met everyone. One clock drove all three rounds in sync across all four screens — '+
+        'that is the rotation working.</div></div>'; }
   }
 
   $("who").textContent="You are "+NAMES[role];
   if(s.type==="done"){ $("clock").textContent="0:00"; return; }
   $("clock").textContent=fmt(remaining);
-  if(s.type==="idle"){
+  if(s.type==="break"){
     $("stage").innerHTML='<div class="msg"><div class="big">'+s.label+'</div>'+
-      '<div class="count">'+fmt(remaining)+'</div></div>';
+      '<div class="count">'+fmt(remaining)+'</div>'+
+      '<div style="margin-top:10px">Your next meeting starts when this hits zero.</div></div>';
   }
 }
 </script>
